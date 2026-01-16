@@ -7,19 +7,138 @@
 
     @copyright: 2018 by Mike Miller
     @license: LGPL
+
+    Default::
+
+        >>> env = Environment(testenv, sensitive=True, writable=True)
+
+        >>> env.USER                                # exists, repr
+        Entry('USER', 'fred')
+
+        >>> str(env.USER)                           # exists, str
+        'fred'
+
+        >>> env.USER + '_suffix'                    # str ops
+        'fred_suffix'
+
+        >>> env.USER.title()                        # str ops II
+        'Fred'
+
+        >>> bool(env.USER)                          # check exists/not empty
+        True
+
+        >>> print(f'term: {env.TERM}')              # via interpolation
+        term: xterm-256color
+
+        >>> 'NO_EXISTO' in env                      # check existence, DNE
+        False
+
+        >>> env.NO_EXISTO or 'default'              # DNE with default
+        'default'
+
+        >>> env.NO_EXISTO                           # var DNE repr
+        NullEntry('NO_EXISTO')
+
+        >>> env.NO_EXISTO.value is None             # check existence II
+        True
+
+        >>> bool(env.NO_EXISTO)                     # check when DNE: False
+        False
+
+        >>> 'EMPTY' in env                          # check existence
+        True
+
+        >>> env.EMPTY                               # exists but empty
+        Entry('EMPTY', '')
+
+        >>> env.EMPTY.value is None                 # check existence II
+        False
+
+        >>> bool(env.EMPTY)                         # check when empty: False
+        False
+
+        >>> env.EMPTY or 'default'                  # exists, blank w/ def.
+        'default'
+
+        >>> key_name = 'PI'
+        >>> env[key_name]                           # getitem syntax
+        '3.1416'
+
+        >>> env.PI.float                            # type conversion
+        3.1416
+
+        >>> env.PORT.int or 9000                    # type conv. w/ default
+        5150
+
+        >>> env.QT_ACCESSIBILITY.truthy             # 0/1/yes/no/true/false
+        True
+
+        >>> sorted(env.JSON_DATA.from_json.keys())  # sorted: compat < 3.6
+        ['one', 'three', 'two']
+
+        >>> env.XDG_DATA_DIRS.list
+        ['/usr/local/share', '/usr/share']
+
+        >>> env.XDG_DATA_DIRZ.list                  # DNE fallback
+        []
+
+        # using isinstance to avoid Platform errs:
+        >>> from pathlib import Path
+        >>> isinstance(env.SSH_AUTH_SOCK.path, Path)
+        True
+
+        >>> all(map(lambda p: isinstance(p, Path), env.XDG_DATA_DIRS.path_list))
+        True
+
+    KR/env compatibility::
+
+        >>> sorted(env.prefix('XDG_', False).keys())
+        ['DATA_DIRS', 'SESSION_ID', 'SESSION_TYPE']
+
+        >>> sorted(env.prefix('XDG_', False).values())
+        ['/usr/local/share:/usr/share', 'c1', 'x11']
+
+        >>> env.map(username='USER')
+        {'username': 'fred'}
+
+    Writing is possible when writable is set to True (see above),
+    though not exceedingly useful::
+
+        >>> env.READY
+        Entry('READY', 'no')
+
+        >>> env.READY = 'yes'
+
+        >>> env.READY
+        Entry('READY', 'yes')
+
+    Unicode test::
+
+        >>> env.MÖTLEY = 'Crüe'
+        >>> env.MÖTLEY
+        Entry('MÖTLEY', 'Crüe')
+
+    Sensitive False::
+
+        >>> env = Environment(testenv, sensitive=False)
+        >>> str(env.USER)                           # interactive repr
+        'fred'
+        >>> str(env.user)                           # interactive repr
+        'fred'
 '''
 #
 #  The implementation below is odd at times due to using the module as a
 #  container.
 #
 import sys, os
+from types import ModuleType
 try:
     from collections.abc import MutableMapping
 except ImportError:
     from collections import MutableMapping  # Py2
 
 
-__version__ = '0.92'
+__version__ = '0.93b1'
 
 
 class EnvironmentVariable(str):
@@ -43,7 +162,7 @@ class Entry(EnvironmentVariable):
         self._pathsep = sep
 
     @property
-    def truthy(self):
+    def truthy(self) -> bool | None:
         ''' Convert a Boolean-like string value to a Boolean or None.
             Note: the rules are different than string type "truthiness."
 
@@ -82,7 +201,7 @@ class Entry(EnvironmentVariable):
         return int(self)
 
     @property
-    def list(self):
+    def list(self) -> list[str]:
         ''' Split a path string (defaults to os.pathsep) and return list.
 
             Use str.split instead when a custom delimiter is needed.
@@ -169,6 +288,7 @@ class Environment(MutableMapping):
     '''
     _Entry_class = Entry            # save for Python2 compatibility :-/
     _NullEntry_class = NullEntry
+    _module: ModuleType
 
     def __init__(self, environ=os.environ,
                        sensitive=False if os.name == 'nt' else True,
@@ -271,6 +391,8 @@ class Environment(MutableMapping):
 
 if __name__ == '__main__':
 
+    import doctest
+
     # keep tests close
     testenv = dict(
         EMPTY='',
@@ -286,128 +408,6 @@ if __name__ == '__main__':
         XDG_SESSION_ID='c1',
         XDG_SESSION_TYPE='x11',
     )
-    __doc__ += '''
-
-        Default::
-
-            >>> env = Environment(testenv, sensitive=True, writable=True)
-
-            >>> env.USER                                # exists, repr
-            Entry('USER', 'fred')
-
-            >>> str(env.USER)                           # exists, str
-            'fred'
-
-            >>> env.USER + '_suffix'                    # str ops
-            'fred_suffix'
-
-            >>> env.USER.title()                        # str ops II
-            'Fred'
-
-            >>> bool(env.USER)                          # check exists/not empty
-            True
-
-            >>> print(f'term: {env.TERM}')              # via interpolation
-            term: xterm-256color
-
-            >>> 'NO_EXISTO' in env                      # check existence, DNE
-            False
-
-            >>> env.NO_EXISTO or 'default'              # DNE with default
-            'default'
-
-            >>> env.NO_EXISTO                           # var DNE repr
-            NullEntry('NO_EXISTO')
-
-            >>> env.NO_EXISTO.value is None             # check existence II
-            True
-
-            >>> bool(env.NO_EXISTO)                     # check when DNE: False
-            False
-
-            >>> 'EMPTY' in env                          # check existence
-            True
-
-            >>> env.EMPTY                               # exists but empty
-            Entry('EMPTY', '')
-
-            >>> env.EMPTY.value is None                 # check existence II
-            False
-
-            >>> bool(env.EMPTY)                         # check when empty: False
-            False
-
-            >>> env.EMPTY or 'default'                  # exists, blank w/ def.
-            'default'
-
-            >>> key_name = 'PI'
-            >>> env[key_name]                           # getitem syntax
-            '3.1416'
-
-            >>> env.PI.float                            # type conversion
-            3.1416
-
-            >>> env.PORT.int or 9000                    # type conv. w/ default
-            5150
-
-            >>> env.QT_ACCESSIBILITY.truthy             # 0/1/yes/no/true/false
-            True
-
-            >>> sorted(env.JSON_DATA.from_json.keys())  # sorted: compat < 3.6
-            ['one', 'three', 'two']
-
-            >>> env.XDG_DATA_DIRS.list
-            ['/usr/local/share', '/usr/share']
-
-            >>> env.XDG_DATA_DIRZ.list                  # DNE fallback
-            []
-
-            # using isinstance to avoid Platform errs:
-            >>> from pathlib import Path
-            >>> isinstance(env.SSH_AUTH_SOCK.path, Path)
-            True
-
-            >>> all(map(lambda p: isinstance(p, Path), env.XDG_DATA_DIRS.path_list))
-            True
-
-        KR/env compatibility::
-
-            >>> sorted(env.prefix('XDG_', False).keys())
-            ['DATA_DIRS', 'SESSION_ID', 'SESSION_TYPE']
-
-            >>> sorted(env.prefix('XDG_', False).values())
-            ['/usr/local/share:/usr/share', 'c1', 'x11']
-
-            >>> env.map(username='USER')
-            {'username': 'fred'}
-
-        Writing is possible when writable is set to True (see above),
-        though not exceedingly useful::
-
-            >>> env.READY
-            Entry('READY', 'no')
-
-            >>> env.READY = 'yes'
-
-            >>> env.READY
-            Entry('READY', 'yes')
-
-        Unicode test::
-
-            >>> env.MÖTLEY = 'Crüe'
-            >>> env.MÖTLEY
-            Entry('MÖTLEY', 'Crüe')
-
-        Sensitive False::
-
-            >>> env = Environment(testenv, sensitive=False)
-            >>> str(env.USER)                           # interactive repr
-            'fred'
-            >>> str(env.user)                           # interactive repr
-            'fred'
-    '''
-    import doctest
-
     # testmod returns (failure_count, test_count):
     sys.exit(
         doctest.testmod(verbose=(True if '-v' in sys.argv else False))[0]
@@ -419,4 +419,4 @@ else:
     Environment._module = sys.modules[__name__]
 
     # Wrap module with instance for direct access
-    sys.modules[__name__] = Environment()
+    sys.modules[__name__]: ModuleType = Environment()
